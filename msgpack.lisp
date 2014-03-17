@@ -24,6 +24,37 @@
 (in-package "DARTS.LIB.MESSAGE-PACK")
 
 
+(define-condition unencodable-object-error (error)
+  ((datum 
+     :initarg :datum :initform nil
+     :reader unencodable-object-error-datum)
+   (reason
+     :initarg :reason :initform nil
+     :reader unencodable-object-error-reason)
+   (message
+     :initarg :message :initform nil
+     :reader unencodable-object-error-message))
+  (:report (lambda (object stream)
+             (let ((datum (unencodable-object-error-datum object))
+                   (reason (unencodable-object-error-reason object))
+                   (message (unencodable-object-error-message object)))
+               (format stream "Failed to encode value ")
+               (let ((*print-length* 16)
+                     (*print-circle* t))
+                 (prin1 datum stream))
+               (format stream " using msgpack~@[ (~A)~]~@[: ~A~]"
+                       reason message))))
+  (:documentation "A condition of this type is signalled, if a given value
+    cannot be encoded in the msgpack format."))
+
+(defun unencodable-object-error (datum &optional reason control &rest arguments)
+  (let ((message (and control (apply #'format nil control arguments))))
+    (error 'unencodable-object-error
+           :datum datum :reason reason
+           :message message)))
+
+
+
 (deftype octet ()
   '(unsigned-byte 8))
 
@@ -69,8 +100,8 @@
                :for p :downfrom (- bits 8) :to 0 :by 8
                :do (put (ldb (byte 8 p) value))))
            (bad-value ()
-             (error 'type-error :datum value
-                    :expected-type `(integer #.(- (expt 2 63)) #.(- (expt 2 64) 1)))))
+             (unencodable-object-error value :reason :out-of-range
+                                       "encodable values must be of type ~S" '(integer #.(- (expt 2 63)) #.(- (expt 2 64) 1)))))
     (declare (inline encode))
     (if (not (minusp value))
         (cond
@@ -125,7 +156,7 @@
           ((<= length 255) (put #xD9) (put length))
           ((<= length #.(- (expt 2 16) 1)) (write-length #xDA 16 length))
           ((<= length #.(- (expt 2 32) 1)) (write-length #xDB 32 length))
-          (t (error "string too long")))
+          (t (unencodable-object-error value :too-large "value is too large")))
         (loop
           :for byte :across octets :do (put byte)))))
 
@@ -140,7 +171,7 @@
       ((<= length 255) (put #xC4) (put length))
       ((<= length #.(- (expt 2 16) 1)) (write-length #xC5 16 length))
       ((<= length #.(- (expt 2 32) 1)) (write-length #xC6 32 length))
-      (t (error "byte array too long")))))
+      (t (unencodable-object-error nil :too-large "length of ~D exceeds supported range" length)))))
 
 
 (define-encoder-pair octet-array (value &key (start 0) end)
@@ -155,7 +186,7 @@
         ((<= length 255) (put #xC4) (put length))
         ((<= length #.(- (expt 2 16) 1)) (write-length #xC5 16 length))
         ((<= length #.(- (expt 2 32) 1)) (write-length #xC6 32 length))
-        (t (error "byte array too long")))
+        (t (unencodable-object-error value :too-large "value is too large")))
       (loop
         :for index :upfrom start :below end
         :do (put (aref value index))))))
@@ -171,7 +202,7 @@
       ((<= length 15) (put (logior #b10010000 length)))
       ((<= length #.(- (expt 2 16) 1)) (write-length #xDC 16 length))
       ((<= length #.(- (expt 2 32) 1)) (write-length #xDD 32 length))
-      (t (error "object array too large")))))
+      (t (unencodable-object-error nil :too-large "length of ~D exceeds supported range" length)))))
 
 
 (define-encoder-pair map-header (length)
@@ -184,7 +215,7 @@
       ((<= length 15) (put (logior #b10000000 length)))
       ((<= length #.(- (expt 2 16) 1)) (write-length #xDE 16 length))
       ((<= length #.(- (expt 2 32) 1)) (write-length #xDF 32 length))
-      (t (error "object array too large")))))
+      (t (unencodable-object-error nil :too-large "length of ~D exceeds supported range" length)))))
 
 
 (defun write-packed-extension-header (type length stream)
@@ -205,7 +236,7 @@
       ((<= length #xFF) (write-length #xC7 8 length) (put (logand type #xFF)))
       ((<= length #xFFFF) (write-length #xC8 16 length) (put (logand type #xFF)))
       ((<= length #xFFFFFFFF) (write-length #xC9 32 length) (put (logand type #xFF)))
-      (t (error 'type-error :datum length :expected-type '(integer 1 #xffffffff))))))
+      (t (unencodable-object-error nil :too-large "length of ~D exceeds supported range" length)))))
 
 
 
