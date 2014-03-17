@@ -295,11 +295,11 @@
 
 
 (defun read-packed-value (stream 
-                          &key (map-reader :alist) (array-reader :vector) (accept-eof nil) 
-                               (default nil) (encoding *default-character-encoding*))
+                          &key (map-reader :alist) (array-reader :vector) (extension-reader :buffer) 
+                               (accept-eof nil) (default nil) (encoding *default-character-encoding*))
   (labels
       ((recurse (&optional accept-eof)
-         (multiple-value-bind (value type) (read-packed-value-or-header stream)
+         (multiple-value-bind (value type tag) (read-packed-value-or-header stream)
            (cond
              ((null type)
               (if accept-eof
@@ -309,7 +309,15 @@
              ((eq type :array-header) (read-array value))
              ((eq type :string-header) (read-packed-string-data value stream :encoding encoding))
              ((eq type :octet-array-header) (read-packed-octet-array-data value stream))
+             ((eq type :extension) (read-extension tag value))
              (t (values value type)))))
+       (read-extension (type length)
+         (if (eq extension-reader :buffer)
+             (let* ((buffer (make-array length :element-type 'octet))
+                    (read (read-sequence buffer stream)))
+               (unless (eql read length) (error "too few bytes for extension ~D with length ~D (~D read)" type length read))
+               (values buffer :extension type))
+             (funcall extension-reader type length stream)))
        (read-map (length)
          (macrolet ((read-pair (form)
                       `(let ((key (recurse))
@@ -346,6 +354,7 @@
                :for k :upfrom 0 :below length
                :do (setf (aref buffer k) (recurse))
                :finally (return buffer)))
-            (t (funcall array-reader length stream))))))
+            (t (funcall array-reader length stream)))
+          :array)))
     (recurse accept-eof)))
 
