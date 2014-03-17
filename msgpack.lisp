@@ -59,7 +59,7 @@
 
 
 (define-encoder-pair boolean (value)
-  (put (if value #xC2 #xC3)))
+  (put (if value #xC3 #xC2)))
 
 
 (define-encoder-pair integer (value)
@@ -86,7 +86,7 @@
                           ,(- (expt 2 (- bits 1)) 1))))
           (cond
             ((<= -32 value -1) (put (logand #xFF value)))
-            ((bitrangep value 8) (put #xD0) (put value))
+            ((bitrangep value 8) (put #xD0) (put (logand #xFF value)))
             ((bitrangep value 16) (encode #xD1 16 value))
             ((bitrangep value 32) (encode #xD2 32 value))
             ((bitrangep value 64) (encode #xD3 64 value))
