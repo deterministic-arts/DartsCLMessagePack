@@ -54,6 +54,28 @@
            :message message)))
 
 
+(define-condition protocol-error (error) ())
+
+(define-condition premature-end-of-input-error (end-of-file protocol-error) ()
+  (:report (lambda (object stream)
+             (format stream "reading from ~S: the end of the input stream was reached before all pending objects could be read completely" 
+                           (stream-error-stream object)))))
+
+(define-condition invalid-tag-byte-error (protocol-error stream-error)
+  ((byte
+     :initarg :value :initform nil
+     :reader protocol-error-byte))
+  (:report (lambda (object stream)
+             (format stream "reading from ~S: the value ~D (~X) does not denote a supported opcode"
+                     (stream-error-stream object)
+                     (protocol-error-byte object)
+                     (protocol-error-byte object)))))
+
+(defun protocol-error-stream (object)
+  (stream-error-stream object))
+
+
+
 
 (deftype octet ()
   '(unsigned-byte 8))
@@ -305,7 +327,7 @@
         ((eql tag #xDD) (values (read-length 4) :array-header))
         ((eql tag #xDE) (values (read-length 2) :map-header))
         ((eql tag #xDF) (values (read-length 4) :map-header))
-        (t (error "invalid tag byte value ~X" tag))))))
+        (t (error 'invalid-tag-byte-error :stream stream :byte tag))))))
 
 
 
@@ -313,7 +335,7 @@
   (let* ((buffer (make-array length :element-type 'octet))
          (bytes-read (read-sequence buffer stream)))
     (unless (eql bytes-read length)
-      (error "premature end of input in octet array"))
+      (error 'premature-end-of-input-error :stream stream))
     buffer))
 
 
@@ -321,7 +343,7 @@
   (let* ((buffer (make-array length :element-type 'octet))
          (read (read-sequence buffer stream)))
     (unless (eql read length)
-      (error "premature end of input in string"))
+      (error 'premature-end-of-input-error :stream stream))
     (octets-to-string buffer :encoding encoding)))
 
 
@@ -335,7 +357,7 @@
              ((null type)
               (if accept-eof
                   (values default nil)
-                  (error "premature end of input stream")))
+                  (error 'premature-end-of-input-error)))
              ((eq type :map-header) (read-map value))
              ((eq type :array-header) (read-array value))
              ((eq type :string-header) (read-packed-string-data value stream :encoding encoding))
