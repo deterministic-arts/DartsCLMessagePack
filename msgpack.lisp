@@ -175,7 +175,9 @@
            (length (length octets)))
         (cond
           ((<= length 31) (put (logior #b10100000 length)))
-          ((<= length 255) (put #xD9) (put length))
+          ;; This would be correct, but the current main raison d'etre for
+          ;; this library cannot cope with the #xD9 single-byte-length encoding
+          ;; ((<= length 255) (put #xD9) (put length))
           ((<= length #.(- (expt 2 16) 1)) (write-length #xDA 16 length))
           ((<= length #.(- (expt 2 32) 1)) (write-length #xDB 32 length))
           (t (unencodable-object-error value :too-large "value is too large")))
