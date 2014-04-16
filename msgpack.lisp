@@ -54,7 +54,9 @@
            :message message)))
 
 
-(define-condition protocol-error (error) ())
+(define-condition protocol-error (error) ()
+  (:documentation "Base class for conditions related to violations of
+    the message pack protocol."))
 
 (define-condition premature-end-of-input-error (end-of-file protocol-error) ()
   (:report (lambda (object stream)
@@ -84,38 +86,42 @@
   `(array octet (,length)))
 
 
-(defmacro define-encoder-pair (conc-name (value &rest args) &body body)
+(defmacro define-encoder (conc-name (value stream &rest args) &body body)
   (let ((writer-name (intern (concatenate 'string "WRITE-PACKED-" (symbol-name conc-name)) "DARTS.LIB.MESSAGE-PACK"))
-        (packer-name (intern (concatenate 'string "PACK-" (symbol-name conc-name)) "DARTS.LIB.MESSAGE-PACK"))
-        (destination (gensym))
-        (input (gensym)))
-    `(progn
-       (defun ,writer-name (,input ,destination ,@args)
-         (macrolet ((put (value) (list 'write-byte value ',destination)))
-           (let ((,value ,input))
-             ,@body))
-         ,input)
-       (defun ,packer-name (,input ,destination ,@args)
-         (macrolet ((put (value) (list 'vector-push-extend value ',destination)))
-           (let ((,value ,input))
-             ,@body))
-         ,input))))
+        (temp (gensym)))
+    (multiple-value-bind (head tail)
+        (loop
+          :with part := nil
+          :for link :on body
+          :for form := (car link)
+          :while (or (stringp form) (and (consp form) (eq (car form) 'declare)))
+          :do (push form part)
+          :finally (return (values (nreverse part) link)))
+      `(defun ,writer-name (,value ,stream ,@args)
+         ,@head
+         (macrolet ((put (,temp) (list 'write-byte ,temp ',stream)))
+           ,@tail)
+         ,value))))
 
 
 (defun write-packed-null (stream)
+  "Writes a placeholder value representing `null' into the given `stream'.
+   This function returns nil."
   (write-byte #xC0 stream)
   nil)
 
-(defun pack-null (array)
-  (vector-push-extend #xC0 array)
-  nil)
 
-
-(define-encoder-pair boolean (value)
+(define-encoder boolean (value stream)
+  "Encodes `value' as a boolean value, writing the result into `stream'. 
+   This function returns `value'."
   (put (if value #xC3 #xC2)))
 
 
-(define-encoder-pair integer (value)
+(define-encoder integer (value stream)
+  "Encodes the integer number `value' and writes the result into `stream'.
+   Note, that `value' must either be of type `(signed-byte 64)' or 
+   `(unsigned-byte 64)'; this is a restriction of the message pack protocol.
+   The function returns `value'."
   (labels ((encode (code bits value)
              (loop 
                :initially (put code)
@@ -146,7 +152,10 @@
             (t (bad-value)))))))
 
 
-(define-encoder-pair single-float (value)
+(define-encoder single-float (value stream)
+  "Encodes the floating point number `value' as IEEE 745 single-precision (32 bit)
+   number, and writes the result into `stream'. It returns `value'. Note, that
+   if a conversion of `value' is necessary, this encoder may lose information."
   (let ((value (encode-float32 (coerce value 'single-float))))
     (loop 
       :initially (put #xCA)
@@ -154,7 +163,10 @@
       :do (put (ldb (byte 8 p) value)))))
 
 
-(define-encoder-pair double-float (value)
+(define-encoder double-float (value stream)
+  "Encodes the floating point number `value' as IEEE 745 double-precision (64 bit)
+   number, and writes the result into `stream'. It returns `value'. Note, that
+   if a conversion of `value' is necessary, this encoder may lose information."
   (let ((value (encode-float64 (coerce value 'double-float))))
     (loop 
       :initially (put #xCB)
@@ -162,7 +174,17 @@
       :do (put (ldb (byte 8 p) value)))))
 
 
-(define-encoder-pair string (value &key (start 0) end (encoding *default-character-encoding*))
+(define-encoder string (value stream &key (start 0) end (encoding *default-character-encoding*))
+  "Encodes the string `value' and writes the result into `stream'. The 
+   characters are transformed into bytes using the given `encoding', which
+   defaults to the value of `*default-character-encoding*'.
+
+   If `start' is supplied, it represents the index of the first character
+   in `value', which should be included in the result (defaults to 0). If
+   `end' is supplied, it represents the end of the portion of `value' to 
+   encode; if omitted or nil, it defaults to the length of `value'.
+
+   This function returns `value'."
   (flet ((write-length (code bits value)
            (loop 
              :initially (put code)
@@ -185,7 +207,12 @@
           :for byte :across octets :do (put byte)))))
 
 
-(define-encoder-pair octet-array-header (length)
+(define-encoder octet-array-header (length stream)
+  "Encodes the start of an array of bytes of the given `length' and writes
+   the result into `stream'. The caller is responsible for writing the actual
+   data immediately after the header written by this function.
+
+   This function returns `length'."
   (flet ((write-length (code bits value)
            (loop 
              :initially (put code)
@@ -198,7 +225,16 @@
       (t (unencodable-object-error nil :too-large "length of ~D exceeds supported range" length)))))
 
 
-(define-encoder-pair octet-array (value &key (start 0) end)
+(define-encoder octet-array (value stream &key (start 0) end)
+  "Encodes the array of bytes `value', and writes the result into the 
+   given `stream'.
+  
+   If `start' is supplied, it represents the index of the first element
+   in `value', which should be included in the result (defaults to 0). If
+   `end' is supplied, it represents the end of the portion of `value' to 
+   encode; if omitted or nil, it defaults to the length of `value'.
+
+   This function returns `value'."
   (flet ((write-length (code bits value)
            (loop 
              :initially (put code)
@@ -216,7 +252,12 @@
         :do (put (aref value index))))))
 
 
-(define-encoder-pair array-header (length)
+(define-encoder array-header (length stream)
+  "Encodes the start of a general array of the given `length' and writes
+   the result into `stream'. The caller is responsible for writing the actual
+   data immediately after the header written by this function.
+
+   This function returns `length'."
   (flet ((write-length (code bits value)
            (loop 
              :initially (put code)
@@ -229,7 +270,12 @@
       (t (unencodable-object-error nil :too-large "length of ~D exceeds supported range" length)))))
 
 
-(define-encoder-pair map-header (length)
+(define-encoder map-header (length stream)
+  "Encodes the start of a map containing `length' pairs and writes
+   the result into `stream'. The caller is responsible for writing the actual
+   data immediately after the header written by this function.
+
+   This function returns `length'."
   (flet ((write-length (code bits value)
            (loop 
              :initially (put code)
@@ -243,6 +289,12 @@
 
 
 (defun write-packed-extension-header (type length stream)
+  "Encodes the start of an extension section with a payload size of `length' 
+   and a type tag value of `type', and writes the result into `stream'. The 
+   caller is responsible for writing the actual data immediately after the 
+   header written by this function.
+
+   This function returns `type'."
   (labels ((put (byte) (write-byte byte stream))
            (write-length (code bits value)
              (loop 
@@ -260,11 +312,55 @@
       ((<= length #xFF) (write-length #xC7 8 length) (put (logand type #xFF)))
       ((<= length #xFFFF) (write-length #xC8 16 length) (put (logand type #xFF)))
       ((<= length #xFFFFFFFF) (write-length #xC9 32 length) (put (logand type #xFF)))
-      (t (unencodable-object-error nil :too-large "length of ~D exceeds supported range" length)))))
-
+      (t (unencodable-object-error nil :too-large "length of ~D exceeds supported range" length))))
+  type)
 
 
 (defun read-packed-value-or-header (stream)
+  "Reads the next available value from `stream'. This function returns
+   three values: `data', `type', `info'.
+
+   The value of `type' is always a symbol, which represents the type
+   of object. It may be one of:
+
+   - nil, if the end of the input stream has been reached; `data' is
+     nil in this case, and `info' is nil, too.
+
+   - :integer, if the value read was an integer number; `data' is the
+     numeric value, and `info' is nil in this case.
+
+   - :number, if the value read was a floating point number; `data' is
+     the numeric value in this case, and `info' is nil.
+
+   - :boolean, if the value read was a boolean value; `data' is the 
+     actual truth value (t or nil), and `info' is nil in this case.
+
+   - :null, if the null value marker has been read; `data' is nil in
+     this case, and so is `info'.
+
+   - :string-header, if the beginning of a string was detected. The
+     value of `data' is the length in bytes of the encoded string, and
+     `info' is nil. The caller is responsible for extracting the actual
+     contents of the string from `stream'.
+
+   - :map-header, if the beginning of a map was detected. The value of
+     `data' is the length of the map (i.e., the number of key/value pairs).
+     The value of `info' is nil. The caller is responsible for extracting
+     the actual contents of the map from `stream'.
+
+   - :array-header, if the beginning of a general array was detected; 
+     the value of `data' is the length of the array (i.e., the number of
+     elements). The value of `info' is nil. The caller is responsible for
+     extracting the contents from `stream'.
+
+   - :octet-array-header, if the beginning of a byte array was detected;
+     the value of `data' is the length of the array (i.e., the number of
+     bytes). The value of `info' is nil. The caller is responsible for
+     extracting the contents from `stream'.
+
+   - :extension-header, if the beginning of an extension record was
+     detected; the value of `data' is the length (in bytes) of the record,
+     and `info' is the type tag (a small integer)."
   (labels
       ((maskp (mask byte value) (= (logand mask byte) value))
        (read-length (bytes)
@@ -334,6 +430,10 @@
 
 
 (defun read-packed-octet-array-data (length stream)
+  "The function reads the next `length' bytes from `stream' and
+   returns the result as an `(array octet (length))'. It makes sure,
+   that all required data is available, and signals a `premature-end-of-input-error',
+   if the end of the stream is reached before all data could be read."
   (let* ((buffer (make-array length :element-type 'octet))
          (bytes-read (read-sequence buffer stream)))
     (unless (eql bytes-read length)
@@ -342,6 +442,11 @@
 
 
 (defun read-packed-string-data (length stream &key (encoding *default-character-encoding*))
+  "Reads the next `length' bytes from `stream', and decodes it into a
+   proper string, assuming, that the data was encoded using the given
+   `encoding' (which defaults to `*default-character-encoding*'). The
+   length of the string returned by this function depends on the encoding
+   and the actual string data."
   (let* ((buffer (make-array length :element-type 'octet))
          (read (read-sequence buffer stream)))
     (unless (eql read length)
@@ -352,6 +457,44 @@
 (defun read-packed-value (stream 
                           &key (map-reader :alist) (array-reader :vector) (extension-reader :buffer) 
                                (accept-eof nil) (default nil) (encoding *default-character-encoding*))
+  "Reads the next available value from `stream', and returns two value,
+   namely `object' and `type', where `object' is the value read, and 
+   `type' is a symbol indicating the value family of `object' (so that
+   the caller can distiguish between `null' and `boolean', for example).
+
+   Strings are assumed to be encoded using `encoding', which defaults to
+   the value of `*default-character-encoding*'.
+
+   The value of `map-reader' determines, how map objects are read. 
+   Possible values are:
+
+   - `:alist' (read maps as association lists, this is the default)
+   - `:plist' (read maps as property lists)
+   - `:hash' (read maps as hash tables with test `equal')
+   - a function (lambda (length stream) ...), which is called in order
+     to decode the actual map contents.
+
+   The value of `array-reader' determines, how general arrays are read.
+   Possible values are:
+
+   - `:vector' (read into a newly allocated simple vector, default)
+   - `:list' (read into a list)
+   - a function (lambda (length stream) ...), which is called in order
+     to decode the actual array contents.
+
+   The value of `extension-reader' determines, how extension records
+   are read. Possible values are:
+
+   - `:buffer' (read the data into a byte array, and yield a pair of
+     type tag and the buffered data; this is the default)
+   - a function (lambda (type length stream) ...), which is called in
+     order to decode the actual record contents.
+
+   If `accept-eof', the function explicitly checks for EOF before the
+   first read operation, and if the end of `stream' has indeed been
+   reached, it returns the values `default' as `object' and nil as `type'.
+   Note, that this applies only to the first read operation; subsequent
+   read operations (if they are necessary), will not be guarded this way."
   (labels
       ((recurse (&optional accept-eof)
          (multiple-value-bind (value type tag) (read-packed-value-or-header stream)
@@ -359,19 +502,20 @@
              ((null type)
               (if accept-eof
                   (values default nil)
-                  (error 'premature-end-of-input-error)))
-             ((eq type :map-header) (read-map value))
-             ((eq type :array-header) (read-array value))
-             ((eq type :string-header) (read-packed-string-data value stream :encoding encoding))
-             ((eq type :octet-array-header) (read-packed-octet-array-data value stream))
-             ((eq type :extension) (read-extension tag value))
+                  (error 'premature-end-of-input-error
+                         :stream stream)))
+             ((eq type :map-header) (values (read-map value) :map))
+             ((eq type :array-header) (values (read-array value) :array))
+             ((eq type :string-header) (values (read-packed-string-data value stream :encoding encoding) :string))
+             ((eq type :octet-array-header) (values (read-packed-octet-array-data value stream) :octet-array))
+             ((eq type :extension) (values (read-extension tag value) :extension))
              (t (values value type)))))
        (read-extension (type length)
          (if (eq extension-reader :buffer)
              (let* ((buffer (make-array length :element-type 'octet))
                     (read (read-sequence buffer stream)))
                (unless (eql read length) (error "too few bytes for extension ~D with length ~D (~D read)" type length read))
-               (values buffer :extension type))
+               (cons type buffer))
              (funcall extension-reader type length stream)))
        (read-map (length)
          (macrolet ((read-pair (form)
@@ -411,5 +555,16 @@
                :finally (return buffer)))
             (t (funcall array-reader length stream)))
           :array)))
-    (recurse accept-eof)))
+    (handler-bind ((end-of-file (lambda (condition)
+                                  ;; If the error occurred on our stream, wrap it into a 
+                                  ;; protocol-error condition (unless it is already one).
+                                  ;; But before doing so, give handlers further down the
+                                  ;; stack a chance of handling the original condition.
+                                  (unless (typep condition 'premature-end-of-input-error)
+                                    (let ((bad-stream (stream-error-stream condition)))
+                                      (when (eq bad-stream stream)
+                                        (signal condition)
+                                        (error 'premature-end-of-input-error 
+                                               :stream bad-stream)))))))
+      (recurse accept-eof))))
 
