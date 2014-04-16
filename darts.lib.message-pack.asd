@@ -27,7 +27,7 @@
   :version "0.1"
   :maintainer "Dirk Esser"
   :licence "MIT"
-  :description "Incomplete implementation of the message pack protocol"
+  :description "Implementation of the message pack exchange format"
   :long-description ""
   :depends-on (ieee-floats babel)
   :serial t
