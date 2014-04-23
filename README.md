@@ -36,8 +36,3 @@ Reading
  - read-packed-string-data LENGTH STREAM &key ENCODING => ARRAY
  - read-packed-value STREAM &key MAP-READER ARRAY-READER EXTENSION-READER ACCEPT-EOF DEFAULT ENCODING => OBJECT
 
-Notes
------
-
-This library has only been lightly tested so far. Use at your own risk...
-
