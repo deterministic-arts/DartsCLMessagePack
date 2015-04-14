@@ -522,39 +522,35 @@
                       `(let ((key (recurse))
                              (value (recurse)))
                          ,form)))
-           (values
-            (cond
-              ((eq map-reader :alist)
-               (loop
-                 :repeat length
-                 :collecting (read-pair (cons key value))))
-              ((eq map-reader :plist)
-               (loop
-                 :repeat length
-                 :nconcing (read-pair (list key value))))
-              ((eq map-reader :hash)
-               (loop
-                 :with table := (make-hash-table :test 'equal)
-                 :repeat length
-                 :do (read-pair (setf (gethash key table) value))
-                 :finally (return table)))
-              (t (funcall map-reader length stream)))
-            :map)))
+           (cond
+             ((eq map-reader :alist)
+              (loop
+                :repeat length
+                :collecting (read-pair (cons key value))))
+             ((eq map-reader :plist)
+              (loop
+                :repeat length
+                :nconcing (read-pair (list key value))))
+             ((eq map-reader :hash)
+              (loop
+                :with table := (make-hash-table :test 'equal)
+                :repeat length
+                :do (read-pair (setf (gethash key table) value))
+                :finally (return table)))
+             (t (funcall map-reader length stream)))))
        (read-array (length)
-         (values
-          (cond
-            ((eq array-reader :list) 
-             (loop
-               :repeat length
-               :collecting (recurse)))
-            ((eq array-reader :vector)
-             (loop
-               :with buffer := (make-array length :element-type 't)
-               :for k :upfrom 0 :below length
-               :do (setf (aref buffer k) (recurse))
-               :finally (return buffer)))
-            (t (funcall array-reader length stream)))
-          :array)))
+         (cond
+           ((eq array-reader :list) 
+            (loop
+              :repeat length
+              :collecting (recurse)))
+           ((eq array-reader :vector)
+            (loop
+              :with buffer := (make-array length :element-type 't)
+              :for k :upfrom 0 :below length
+              :do (setf (aref buffer k) (recurse))
+              :finally (return buffer)))
+           (t (funcall array-reader length stream)))))
     (handler-bind ((end-of-file (lambda (condition)
                                   ;; If the error occurred on our stream, wrap it into a 
                                   ;; protocol-error condition (unless it is already one).
