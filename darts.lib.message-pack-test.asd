@@ -1,6 +1,6 @@
 #|                                           -*- mode: lisp; coding: utf-8 -*-
   Deterministic Arts -- Message Pack
-  Copyright (c) 2014 Dirk Esser
+  Copyright (c) 2014, 2020 Dirk Esser
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -29,6 +29,6 @@
   :licence "MIT"
   :description "Incomplete implementation of the message pack protocol"
   :long-description ""
-  :depends-on (darts.lib.message-pack stefil trivial-octet-streams)
+  :depends-on (#:darts.lib.message-pack #:stefil #:trivial-octet-streams)
   :serial t
   :components ((:file "test")))

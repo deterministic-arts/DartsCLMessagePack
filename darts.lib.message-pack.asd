@@ -1,6 +1,6 @@
 #|                                           -*- mode: lisp; coding: utf-8 -*-
   Deterministic Arts -- Message Pack
-  Copyright (c) 2014 Dirk Esser
+  Copyright (c) 2014, 2020 Dirk Esser
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -29,7 +29,7 @@
   :licence "MIT"
   :description "Implementation of the message pack exchange format"
   :long-description ""
-  :depends-on (ieee-floats babel)
+  :depends-on (#:ieee-floats #:babel)
   :serial t
   :components ((:file "package")
                (:file "msgpack")))

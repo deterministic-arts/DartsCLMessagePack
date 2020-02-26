@@ -1,6 +1,6 @@
 #|                                           -*- mode: lisp; coding: utf-8 -*-
   Deterministic Arts -- Message Pack
-  Copyright (c) 2014 Dirk Esser
+  Copyright (c) 2014, 2020 Dirk Esser
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -21,17 +21,17 @@
   THE SOFTWARE.
 |#
 
-(defpackage "DARTS.LIB.MESSAGE-PACK"
-  (:use "COMMON-LISP" "IEEE-FLOATS" "BABEL")
+(defpackage #:darts.lib.message-pack
+  (:use #:common-lisp #:ieee-floats #:babel)
   (:export 
-    "WRITE-PACKED-NULL" "WRITE-PACKED-BOOLEAN" "WRITE-PACKED-INTEGER"
-    "WRITE-PACKED-SINGLE-FLOAT" "WRITE-PACKED-DOUBLE-FLOAT" "WRITE-PACKED-STRING" 
-    "WRITE-PACKED-OCTET-ARRAY" "WRITE-PACKED-OCTET-ARRAY-HEADER"
-    "WRITE-PACKED-ARRAY-HEADER" "WRITE-PACKED-MAP-HEADER" "WRITE-PACKED-EXTENSION-HEADER"
-    "READ-PACKED-VALUE-OR-HEADER" "READ-PACKED-STRING-DATA" "READ-PACKED-OCTET-ARRAY-DATA" 
-    "READ-PACKED-VALUE" "UNENCODABLE-OBJECT-ERROR" "UNENCODABLE-OBJECT-ERROR-DATUM" 
-    "UNENCODABLE-OBJECT-ERROR-REASON" "UNENCODABLE-OBJECT-ERROR-MESSAGE" "PROTOCOL-ERROR" 
-    "PROTOCOL-ERROR-BYTE" "PROTOCOL-ERROR-STREAM" "PREMATURE-END-OF-INPUT-ERROR" 
-    "INVALID-TAG-BYTE-ERROR" "*DEFAULT-CHARACTER-ENCODING*")
+    #:write-packed-null #:write-packed-boolean #:write-packed-integer
+    #:write-packed-single-float #:write-packed-double-float #:write-packed-string 
+    #:write-packed-octet-array #:write-packed-octet-array-header
+    #:write-packed-array-header #:write-packed-map-header #:write-packed-extension-header
+    #:read-packed-value-or-header #:read-packed-string-data #:read-packed-octet-array-data 
+    #:read-packed-value #:unencodable-object-error #:unencodable-object-error-datum 
+    #:unencodable-object-error-reason #:unencodable-object-error-message #:protocol-error 
+    #:protocol-error-byte #:protocol-error-stream #:premature-end-of-input-error 
+    #:invalid-tag-byte-error #:*default-character-encoding*)
   (:documentation "A simple implementation of the message pack binary data
     encoding format. All value families are supported."))

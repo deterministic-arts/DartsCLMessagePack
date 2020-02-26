@@ -1,9 +1,9 @@
 
-(defpackage "DARTS.LIB.MESSAGE-PACK-TEST"
-  (:use "COMMON-LISP" "DARTS.LIB.MESSAGE-PACK" "STEFIL" "TRIVIAL-OCTET-STREAMS")
+(defpackage #:darts.lib.message-pack-test
+  (:use #:common-lisp #:darts.lib.message-pack #:stefil #:trivial-octet-streams)
   (:export))
 
-(in-package "DARTS.LIB.MESSAGE-PACK-TEST")
+(in-package #:darts.lib.message-pack-test)
 
 (in-root-suite)
 
